@@ -1,16 +1,15 @@
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
-import { VitePWA } from 'vite-plugin-pwa';
-import cartographer from '@replit/vite-plugin-cartographer';
-import runtimeErrorModal from '@replit/vite-plugin-runtime-error-modal';
-import shadcnTheme from '@replit/vite-plugin-shadcn-theme-json';
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import themePlugin from "@replit/vite-plugin-shadcn-theme-json";
+import path from "path";
+import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
+import { VitePWA } from "vite-plugin-pwa";
 
 export default defineConfig({
   plugins: [
     react(),
-    cartographer(),
-    runtimeErrorModal(),
-    shadcnTheme(),
+    runtimeErrorOverlay(),
+    themePlugin(),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'icon-192.png', 'icon-512.png'],
@@ -56,17 +55,55 @@ export default defineConfig({
           }
         ]
       }
-    })
+    }),
+    ...(process.env.NODE_ENV !== "production" &&
+    process.env.REPL_ID !== undefined
+      ? [
+          await import("@replit/vite-plugin-cartographer").then((m) =>
+            m.cartographer(),
+          ),
+        ]
+      : []),
   ],
-  // Keep any other existing configuration below
   resolve: {
     alias: {
-      '@': '/client/src',
-      '@assets': '/attached_assets',
-      '@shared': '/shared'
-    }
+      "@": path.resolve(__dirname, "./client/src"),
+      "@server": path.resolve(__dirname, "./server"),
+      "@shared": path.resolve(__dirname, "./shared"),
+      "@hooks": path.resolve(__dirname, "./client/src/hooks"),
+      "@components": path.resolve(__dirname, "./client/src/components"),
+      "@lib": path.resolve(__dirname, "./client/src/lib"),
+      "@assets": path.resolve(__dirname, "./attached_assets"),
+    },
   },
   server: {
-    host: '0.0.0.0'
-  }
+    host: process.env.NODE_ENV === "production" ? "0.0.0.0" : undefined,
+    port: 5173,
+    hmr: {
+      clientPort: process.env.NODE_ENV === "production" ? 443 : undefined,
+      protocol: process.env.NODE_ENV === "production" ? "wss" : undefined,
+    }
+  },
+  optimizeDeps: {
+    include: ["react", "react-dom", "react-hook-form", "zod", "wouter"],
+  },
+  build: {
+    outDir: "dist",
+    chunkSizeWarningLimit: 1000,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          react: ["react", "react-dom"],
+          form: ["react-hook-form", "@hookform/resolvers"],
+          ui: ["@/components/ui"],
+        },
+      },
+    },
+  },
+  define: {
+    "process.env.NODE_ENV": JSON.stringify(process.env.NODE_ENV),
+  },
+  esbuild: {
+    logOverride: { "this-is-undefined-in-esm": "silent" },
+  },
 });
